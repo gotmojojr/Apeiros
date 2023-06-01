@@ -1,0 +1,42 @@
+#Download the combined transaction history from google sheets as a CSV file. Save it in the Galextek folder in your desktop, under the transaction folder.
+#Save the file as "combined"
+#This program will output the total cashflow for each category of transactions.
+
+import pandas as pd
+import yfinance as yf
+
+path = '/Users/rohanbanerjea/Desktop/GalexTek/Transactions/combined.csv'
+table = pd.read_csv(path)
+
+#Convert USD to CAD
+usdcad = yf.download('USDCAD=X',period='1y',interval='1d')
+for x in table.index:
+    date = table['Date'].iloc[x]
+    if table['Currency'].iloc[x] == 'USD':
+        rate = usdcad['Close'].loc[date]
+        table['Amount'].iloc[x] = table['Amount'].iloc[x] * rate
+
+table['Value'] = 0
+for x in table.index:
+    if table['D/C'].iloc[x] == 'Debit':
+        table['Value'].iloc[x] = table['Value'].iloc[x] - float(table['Amount'].iloc[x])
+    elif table['D/C'].iloc[x] == 'Credit':
+        table['Value'].iloc[x] = table['Value'].iloc[x] + float(table['Amount'].iloc[x])
+
+categories = table['Categories'].unique()
+amounts = dict()
+for x in categories:
+    amounts[x] = 0
+
+for y in categories:
+    for x in table.index:
+        if table['Categories'].iloc[x] == y:
+            amounts[y] = amounts[y] + table['Value'].iloc[x]  #Change this to table['Value'] if you want +/- amounts. Change to table['Amounts'] if you want absolute value
+        else:
+            continue
+
+amounts_df = pd.DataFrame.from_dict(amounts,orient='index')
+print(amounts_df)
+
+with pd.ExcelWriter('/Users/rohanbanerjea/Desktop/GalexTek/Transactions/categories.xlsx') as writer:
+    amounts_df.to_excel(writer,'Categories')
