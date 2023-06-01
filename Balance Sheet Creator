@@ -1,0 +1,93 @@
+import pandas as pd
+import yfinance as yf
+
+cols = ['Amount']
+rows = ["ASSETS",
+    "CURRENT ASSETS",
+    "Cash and Cash Equivalents",
+    "CAD Cash",
+    "USD Cash",
+    "Short-term Investments",
+    "Accounts Receivable",
+    "Inventory",
+    "Prepaid Expenses",
+    "Other Current Assets",
+    "Total Current Assets",
+    "Fixed Assets",
+    "PPE",
+    "Accumulated Depreciation",
+    "Intangible Assets",
+    "Other Long-term Assets",
+    "Total Fixed Assets",
+    "Total Assets",
+    "LIABILITIES",
+    "CURRENT LIABILITIES",
+    "Accounts Payable",
+    "Short-term Borrowings",
+    "Accrued Expenses",
+    "Deferred Revenue",
+    "Other Current Liabilities",
+    "Total Current Liabilities",
+    "Long-term Liabilities",
+    "Long-term Debt",
+    "Deferred Tax Liabilities",
+    "Other Long-term Liabilities",
+    "Total Long-term Liabilities",
+    "Total Liabilities",
+    "EQUITY",
+    "Shareholders' Equity",
+    "Common Stock",
+    "Preferred Stock",
+    "Additional Paid-in Capital",
+    "Retained Earnings",
+    "Treasury Stock",
+    "Other Equity",
+    "Total Shareholders' Equity",
+    "Total Liabilities and Equity"]
+
+balance_sheet = pd.DataFrame(data=0,columns=cols,index=rows)
+
+path = '/Users/rohanbanerjea/Desktop/GalexTek/Transactions/combined.csv'
+table = pd.read_csv(path)
+
+#Convert USD to CAD
+usdcad = yf.download('USDCAD=X',period='1y',interval='1d')
+for x in table.index:
+    date = table['Date'].iloc[x]
+    if table['Currency'].iloc[x] == 'USD':
+        rate = usdcad['Close'].loc[date]
+        table['Amount'].iloc[x] = table['Amount'].iloc[x] * rate
+
+#Accounting for D/C
+table['Value'] = 0
+for x in table.index:
+    if table['D/C'].iloc[x] == 'Debit':
+        table['Value'].iloc[x] = table['Value'].iloc[x] - float(table['Amount'].iloc[x])
+    elif table['D/C'].iloc[x] == 'Credit':
+        table['Value'].iloc[x] = table['Value'].iloc[x] + float(table['Amount'].iloc[x])
+
+# Standardised Allocations
+for x in table.index:
+    deb_asset = table['Balance Sheet Debit (Asset)'].iloc[x]
+    cred_asset = table['Balance Sheet Credit (Asset)'].iloc[x]
+    deb_LE = table['Balance Sheet Debit (L+E)'].iloc[x]
+    cred_LE = table['Balance Sheet Credit (L+E)'].iloc[x]
+    if deb_asset in balance_sheet.index:
+        balance_sheet['Amount'].loc[deb_asset] = balance_sheet['Amount'].loc[deb_asset] + table['Amount'].iloc[x]
+    if deb_LE in balance_sheet.index:
+        balance_sheet['Amount'].loc[deb_LE] = balance_sheet['Amount'].loc[deb_LE] + table['Amount'].iloc[x]
+    if cred_asset in balance_sheet.index:
+        balance_sheet['Amount'].loc[cred_asset] = balance_sheet['Amount'].loc[cred_asset] - table['Amount'].iloc[x]
+    if cred_LE in balance_sheet.index:
+        balance_sheet['Amount'].loc[cred_LE] = balance_sheet['Amount'].loc[cred_LE] - table['Amount'].iloc[x]
+
+# Final Summations
+balance_sheet['Amount'].loc['Total Assets'] = sum(balance_sheet['Amount'].loc['Cash and Cash Equivalents':'Total Fixed Assets'])
+balance_sheet['Amount'].loc['Total Liabilities'] = sum(balance_sheet['Amount'].loc['Accounts Payable':'Total Long-term Liabilities'])
+balance_sheet['Amount'].loc["Total Shareholders' Equity"] = sum(balance_sheet['Amount'].loc["Shareholders' Equity":"Other Equity"])
+balance_sheet['Amount'].loc["Total Liabilities and Equity"] = balance_sheet['Amount'].loc["Total Shareholders' Equity"] + balance_sheet['Amount'].loc["Total Liabilities"]
+
+print(balance_sheet['Amount'].loc['Total Assets']-balance_sheet['Amount'].loc['Total Liabilities and Equity'])
+print(balance_sheet)
+
+
