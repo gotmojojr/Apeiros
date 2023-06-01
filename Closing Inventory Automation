@@ -1,0 +1,153 @@
+import pandas as pd
+import numpy as np
+import datetime
+
+#SETUP
+path = '/Users/rohanbanerjea/Desktop/GalexTek/Inventory/Monthly_Inventory/Closing.xlsx'
+opening = pd.read_excel(path, sheet_name='Opening Inventory')
+inflow = pd.read_excel(path, sheet_name='Inflow')
+outflow = pd.read_excel(path, sheet_name='Outflow')
+close = pd.read_excel(path, sheet_name='Closing Inventory')
+serial_no = pd.read_excel(path, sheet_name='Serial Number')
+
+opening = opening.sort_values('SERIAL NUMBER',ascending=True)
+opening.index = range(0,len(opening))
+where = 0
+for x in opening['SERIAL NUMBER']:
+    if type(x) == str:
+        where = where + 1
+
+#PREPROCESSING DATAFRAME
+pre_close = opening.drop(opening.index[where:],axis=0)
+pre_close = pre_close.drop(['IN WAREHOUSE','OUTSIDE WAREHOUSE','LAST ACCOUNTED FOR ON (YYYY-MM-DD):','NOTES'],axis=1)
+unit_price = dict()
+quantiddies = dict()
+valzz = dict()
+for x in pre_close.index:
+    quant = pre_close['TOTAL QUANTITY PURCHASED'].iloc[x]
+    val = pre_close['INVENTORY VALUE'].iloc[x]
+    unit_price[pre_close['SERIAL NUMBER'].iloc[x]] = val/quant
+    quantiddies[pre_close['SERIAL NUMBER'].iloc[x]] = quant
+    valzz[pre_close['SERIAL NUMBER'].iloc[x]] = val
+
+#ACCOUNTING FOR INFLOW
+where = 0
+for x in inflow['SERIAL NUMBER']:
+    if type(x) == str:
+        where = where + 1
+inflow = inflow.iloc[:where]
+serials = pre_close['SERIAL NUMBER'].values #PREPROCESSING
+
+opening_inventory = dict()
+for x in pre_close.index:
+    opening_inventory[pre_close['SERIAL NUMBER'].iloc[x]] = pre_close['TOTAL QUANTITY PURCHASED'].iloc[x]
+monthly_inflow = dict()
+inventory_value = dict()
+currents = list()
+for x in inflow.index:
+    current = inflow['SERIAL NUMBER'].iloc[x]
+    currents.append(x)
+    quantity = inflow['TOTAL INFLOW QUANTITY'].iloc[x]
+    cost = inflow['TOTAL COST'].iloc[x]
+    shipping = inflow['TOTAL SHIPPING COST'].iloc[x]
+
+    if current in serials:
+        for y in pre_close.index:
+            if pre_close['SERIAL NUMBER'].iloc[y] == current:
+                which = y
+                break
+        alr_here = quantiddies[current]
+        p = quantity/(quantity+alr_here)
+        unit_cost = cost/quantity
+        alr_price = unit_price[current]
+        unit_price[current] = p*(unit_cost) + (1-p)*(alr_price)
+        pre_close['TOTAL QUANTITY PURCHASED'].iloc[which] = pre_close['TOTAL QUANTITY PURCHASED'].iloc[which] + quantity
+        pre_close['INVENTORY VALUE'].iloc[which] = pre_close['INVENTORY VALUE'].iloc[which] + shipping + cost
+
+    else:
+        data = [inflow['INVENTORY NAME'].iloc[x],
+                inflow['TYPE'].iloc[x],
+                inflow['PURCHASING COMPANY'].iloc[x],
+                inflow['SERIAL NUMBER'].iloc[x],
+                inflow['TOTAL INFLOW QUANTITY'].iloc[x],
+                inflow['TOTAL COST'].iloc[x]]
+        opening_inventory[current] = 0
+        unit_price[current] = cost/quantity
+        pre_close = pre_close.T
+        pre_close.insert(len(pre_close.columns),len(pre_close.columns),np.array(data))
+        pre_close = pre_close.T
+        pre_close['TOTAL QUANTITY PURCHASED'] = pd.to_numeric(pre_close['TOTAL QUANTITY PURCHASED'])
+        pre_close['INVENTORY VALUE'] = pd.to_numeric(pre_close['INVENTORY VALUE'])
+        for y in pre_close.index:
+            if pre_close['SERIAL NUMBER'].iloc[y] == current:
+                which = y
+                break
+        pre_close['TOTAL QUANTITY PURCHASED'].iloc[which] = inflow['TOTAL INFLOW QUANTITY'].iloc[x]
+        pre_close['INVENTORY VALUE'].iloc[which] = inflow['TOTAL COST'].iloc[x]
+
+for x in pre_close.index:
+    monthly_inflow[pre_close['SERIAL NUMBER'].iloc[x]] = 0
+for x in currents:
+    monthly_inflow[inflow['SERIAL NUMBER'].iloc[x]] = inflow['TOTAL INFLOW QUANTITY'].iloc[x]
+    inventory_value[inflow['SERIAL NUMBER'].iloc[x]] = inflow['TOTAL COST'].iloc[x]
+
+#ACCOUNTING FOR OUTFLOW
+where = 0
+for x in outflow['SERIAL NUMBER']:
+    if type(x) == str:
+        where = where + 1
+outflow = outflow.iloc[:where]
+serials = pre_close['SERIAL NUMBER'].values #PREPROCESSING
+monthly_outflow = dict()
+
+currents = list()
+for x in outflow.index:
+    current = outflow['SERIAL NUMBER'].iloc[x]
+    currents.append(x)
+    quantity = outflow['TOTAL OUTFLOW QUANTITY'].iloc[x]
+    cost = unit_price[current] * quantity
+    shipping = outflow['TOTAL SHIPPING COST'].iloc[x]
+    monthly_outflow[current] = quantity
+
+    for y in pre_close.index:
+        if pre_close['SERIAL NUMBER'].iloc[y] == current:
+            which = y
+            break
+    pre_close['TOTAL QUANTITY PURCHASED'].iloc[which] = pre_close['TOTAL QUANTITY PURCHASED'].iloc[which] - quantity
+    pre_close['INVENTORY VALUE'].iloc[which] = pre_close['INVENTORY VALUE'].iloc[which] - cost
+
+for x in pre_close.index:
+    monthly_outflow[pre_close['SERIAL NUMBER'].iloc[x]] = 0
+for x in currents:
+    monthly_outflow[outflow['SERIAL NUMBER'].iloc[x]] = outflow['TOTAL OUTFLOW QUANTITY'].iloc[x]
+
+#FINAL DATAFRAME
+closing_inventory = pd.DataFrame(columns=close.columns, index=pre_close.index)
+closing_inventory['NAME'] = pre_close['NAME']
+closing_inventory['TYPE'] = pre_close['TYPE']
+closing_inventory['OWNERSHIP COMPANY'] = pre_close['OWNERSHIP COMPANY']
+closing_inventory['SERIAL NUMBER'] = pre_close['SERIAL NUMBER']
+closing_inventory['BEGINNING INVENTORY'] = opening_inventory.values()
+closing_inventory['INFLOW'] = monthly_inflow.values()
+closing_inventory['OUTFLOW'] = monthly_outflow.values()
+closing_inventory['ENDING QUANTITY'] = pre_close['TOTAL QUANTITY PURCHASED']
+closing_inventory['INVENTORY VALUE'] = pre_close['INVENTORY VALUE']
+
+#OPENING INVENTORY FOR THE NEXT MONTH
+today = datetime.date.today()
+next_month = pd.DataFrame(columns=opening.columns, index=closing_inventory.index)
+next_month['NAME'] = closing_inventory['NAME']
+next_month['TYPE'] = closing_inventory['TYPE']
+next_month['OWNERSHIP COMPANY'] = closing_inventory['OWNERSHIP COMPANY']
+next_month['SERIAL NUMBER'] = closing_inventory['SERIAL NUMBER']
+next_month['TOTAL QUANTITY PURCHASED'] = closing_inventory['ENDING QUANTITY']
+next_month['IN WAREHOUSE'] = closing_inventory['ENDING QUANTITY']
+next_month['OUTSIDE WAREHOUSE'] = None
+next_month['LAST ACCOUNTED FOR ON (YYYY-MM-DD):'] = today
+next_month['INVENTORY VALUE'] = closing_inventory['INVENTORY VALUE']
+next_month['NOTES'] = None
+
+#TO EXCEL
+with pd.ExcelWriter('/Users/rohanbanerjea/Desktop/GalexTek/Inventory/Monthly_Inventory/Processed_Inventory.xlsx') as writer:
+    closing_inventory.to_excel(writer, sheet_name='Closing Inventory')
+    next_month.to_excel(writer, sheet_name="Opening Inventory - Next Month")
