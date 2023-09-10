@@ -1,0 +1,22 @@
+import pandas as pd
+import yfinance as yf
+
+url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+table = pd.read_html(url)[0]
+
+screen = dict()
+for x in table['Symbol']:
+    try:
+        now = yf.download(x, period='1y', interval='1d')
+        now['Return'] = (now['Close'] - now['Open']) / now['Open']
+        first = now['Close'].iloc[0]
+        last = now['Close'].iloc[-1]
+        slope = (last-first)/252
+        if slope > 0:
+            screen[x] = slope
+    except:
+        continue
+
+df = pd.DataFrame.from_dict(screen,orient='index')
+df = df.sort_values(df.columns[0],ascending=True)
+print(df.head(10))
