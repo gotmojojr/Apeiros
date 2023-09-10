@@ -1,0 +1,179 @@
+import numpy as np
+
+# Create Deck
+suits = ['H', 'C', 'S', 'D']
+types = ['A', 'K', 'Q', 'J', 10, 9, 8, 7, 6, 5, 4, 3, 2]
+deck = list()
+for x in types:
+    for y in suits:
+        card = str(x) + str(y)
+        deck.append(card)
+OG_Deck = deck.copy()
+
+# Create Players
+players = 3
+player_list = []
+for x in range(1, players + 1):
+    exec("player_list.append('P" + str(x) + "')")
+    exec("P" + str(x) + "={}")
+
+#Player Tracker
+player_list2 = []
+for p in player_list:
+    wins = {'Pair': 0,'Two Pair': 0,'Three Of A Kind':0,'Straight':0,'Flush':0,'Full House':0,'Four Of A Kind':0,'Straight Flush':0,'Royal Flush':0}
+    exec(p+"_d={'Pair': 0,'Two Pair': 0,'Three Of A Kind':0,'Straight':0,'Flush':0,'Full House':0,'Four Of A Kind':0,'Straight Flush':0,'Royal Flush':0}")
+    exec("player_list2.append("+p+"_d)")
+
+numero = 10000
+for time in range(0,numero):
+    # Deal Hands
+    used = list()
+    hands = {}
+    for player in player_list:
+        card_1 = np.random.choice(deck)
+        used.append(card_1)
+        deck.remove(card_1)
+
+        card_2 = np.random.choice(deck)
+        used.append(card_2)
+        deck.remove(card_2)
+        hands[player] = [card_1, card_2]
+
+    # Cards on Table
+    COT = []
+    for x in range(0, 5):
+        c = np.random.choice(deck)
+        COT.append(c)
+        used.append(c)
+        deck.remove(c)
+
+    # Possibilities
+
+    # Royal Flush
+    royal_flush = [['10H', 'JH', 'QH', 'KH', 'AH'],
+                   ['10S', 'JS', 'QS', 'KS', 'AS'],
+                   ['10D', 'JD', 'QD', 'KD', 'AD'],
+                   ['10C', 'JC', 'QC', 'KC', 'AC']]
+
+    # Straight Flush and Straight
+    straight = [['A', 2, 3, 4, 5],
+                [2, 3, 4, 5, 6],
+                [3, 4, 5, 6, 7],
+                [4, 5, 6, 7, 8],
+                [5, 6, 7, 8, 9],
+                [6, 7, 8, 9, 10],
+                [7, 8, 9, 10, 'J'],
+                [8, 9, 10, 'J', 'Q'],
+                [9, 10, 'J', 'Q', 'K'],
+                [10, 'J', 'Q', 'K', 'A']]
+
+    straight_flush = []
+    for line in straight:
+        for suit in suits:
+            temp = []
+            for l in line:
+                val = str(l) + str(suit)
+                temp.append(val)
+            straight_flush.append(temp)
+
+    # Evaluate
+    value = dict()
+    for player in player_list:
+        neo = exec(player+"_d")
+        value[player] = 0
+        pocket = hands[player]
+        combine = pocket + COT
+
+        # Count
+        counter = {}
+        for x in OG_Deck:
+            x = x[0]
+            counter[x] = 0
+        for x in combine:
+            x = x[0]
+            counter[x] = counter[x] + 1
+
+        # Pair
+        pairs = 0
+        for count in counter.values():
+            if count == 2:
+                pairs = pairs + 1
+        if pairs == 1:
+            value[player] = 'Pair'
+
+        # Two Pair
+        if pairs == 2:
+            value[player] = "Two Pair"
+
+        # Three of a kind
+        for count in counter.values():
+            if count == 3:
+                value[player] = "Three Of A Kind"
+
+        # Straight
+        combine_new_straight = []
+        for x in combine:
+            x = x[0]
+            combine_new_straight.append(x)
+        for s in straight:
+            c = 0
+            for com in combine_new_straight:
+                if com in s:
+                    c = c + 1
+            if c >= 5:
+                value[player] = "Straight"
+
+        # Flush
+        flush_suits_count = {"H": 0, "S": 0, "D": 0, "C": 0}
+        for x in combine:
+            curr = x[-1]
+            flush_suits_count[curr] = flush_suits_count[curr] + 1
+        for x in flush_suits_count.values():
+            if x >= 5:
+                value[player] = "Flush"
+
+        # Full House
+        if value[player] == "Three Of A Kind":
+            if pairs >= 1:
+                value[player] = "Full House"
+
+        # Four of A Kind
+        for count in counter.values():
+            if count == 4:
+                value[player] = "Four Of A Kind"
+
+        # Straight Flush
+        for sf in straight_flush:
+            c = 0
+            for com in combine:
+                if com in sf:
+                    c = c + 1
+            if c >= 5:
+                value[player] = "Straight Flush"
+
+        # Royal Flush
+        for rf in royal_flush:
+            c = 0
+            for com in combine:
+                if com in rf:
+                    c = c + 1
+            if c >= 5:
+                value[player] = "Royal Flush"
+
+        if value[player] != 0:
+            exec(player+"_d['"+value[player]+"'] = "+player+"_d['"+value[player]+"'] +1")
+
+    deck = OG_Deck.copy()
+    for winner in value.values():
+        if winner != 0:
+            wins[winner] = wins[winner] + 1
+
+print(wins)
+
+for pp in player_list2:
+    for p in pp:
+        pp[p] = str(round(pp[p]/numero*100,2))+"%"
+c = 1
+for ohana in player_list2:
+    print("Player"+str(c)+": ", ohana)
+    c = c + 1
