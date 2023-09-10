@@ -1,0 +1,86 @@
+import pandas as pd
+from bs4 import BeautifulSoup as bs
+import requests
+from fake_useragent import FakeUserAgent
+import yfinance as yf
+
+stock=input("Stock Ticker: ")
+ticker_caps=stock.upper()
+tickers=list(ticker_caps.split())
+prices=dict()
+period="1y"
+interval="1d"
+
+price_expectation=dict()
+date_vol = dict()
+for t in tickers:
+    try:
+        price_exp_by_date = dict()
+        url = 'https://finance.yahoo.com/quote/' + t + '/options?p=' + t
+        user = FakeUserAgent()
+        rand1 = user.random
+        date_list = list()
+        date_dict = dict()
+        r = requests.get(url, headers={'User-Agent': rand1})
+        soup = bs(r.text, 'html.parser')
+        body = soup.find_all('body')
+        for row in body:
+            divs = row.find_all('div', class_='Fl(start) Pend(18px)')
+            for div in divs:
+                select = div.find('select')
+                for sel in select:
+                    date_list.append(sel['value'])
+                    date_dict[sel['value']] = sel.string
+
+        for date in date_list:
+            url1 = 'https://finance.yahoo.com/quote/' + t + '/options?p=' + t + '&date=' + date
+            rand2 = user.chrome
+            r = requests.get(url1, headers={'User-Agent': rand2})
+            opt = pd.read_html(r.text)
+            callopt = opt[0]
+            putopt = opt[1]
+
+            for x in callopt['Volume']:
+                callopt['Volume'] = callopt['Volume'].replace('-', '0')
+                callopt["Strike"] = callopt['Strike'].replace('-', '0')
+                callopt['Ask'] = callopt['Ask'].replace('-', '0')
+            callopt['Volume'] = callopt["Volume"].astype(int)
+            callopt['Strike'] = callopt['Strike'].astype(float)
+            callopt['Ask'] = callopt["Ask"].astype(float)
+            for x in putopt["Volume"]:
+                putopt["Volume"] = putopt["Volume"].replace('-', '0')
+                putopt['Strike'] = putopt['Strike'].replace('-', '0')
+                putopt['Ask'] = putopt['Ask'].replace('-', '0')
+            putopt["Volume"] = putopt['Volume'].astype(int)
+            putopt['Strike'] = putopt['Strike'].astype(float)
+            putopt['Ask'] = putopt['Ask'].astype(float)
+
+            vol = sum(callopt["Volume"]) + sum(putopt["Volume"])
+
+            callopt['vol weight'] = callopt["Volume"] / vol
+            callopt['exp'] = callopt['Strike'] + callopt['Ask']
+
+            putopt['vol weight'] = putopt['Volume'] / vol
+            putopt['exp'] = putopt['Strike'] - putopt['Ask']
+
+            callopt['VWE'] = callopt['exp'] * callopt['vol weight']
+            putopt['VWE'] = putopt['exp'] * putopt['vol weight']
+
+            vol_weighted_prediction = sum(callopt['VWE']) + sum(putopt['VWE'])
+            current_date = date_dict[date]
+            price_exp_by_date[current_date] = vol_weighted_prediction
+            price_expectation[t] = price_exp_by_date
+            date_vol[date] = vol
+        print(t, ": Created future prices based on market expectations")
+
+    except:
+        print(t,": Unable to use options to find market expectations")
+        continue
+
+mkt_expectation = pd.DataFrame.from_dict(price_expectation, orient='index')
+mkt_expectation=mkt_expectation.transpose()
+mkt_expectation['Volume'] = date_vol.values()
+
+price = yf.download(ticker_caps).iloc[-1]
+print(price)
+print(mkt_expectation)
