@@ -1,0 +1,51 @@
+import pandas as pd
+import yfinance as yf
+import numpy as np
+from fake_useragent import FakeUserAgent
+import requests
+
+url = 'https://ca.finance.yahoo.com/gainers/'
+user = FakeUserAgent().chrome
+r = requests.get(url,headers={"User-Agent":user})
+table = pd.read_html(r.text)
+table = table[0]
+print(table)
+
+syms = list()
+for x in table['Symbol']:
+    x = str(x)
+    syms.append(x)
+
+screen = list()
+industry = dict()
+for x in syms:
+    try:
+        now = yf.download(x, period='3d', interval='1m')
+        now['Return'] = (now['Close'] - now['Open']) / now['Open']
+        c = 0
+        for y in now['Return']:
+            if y > 0:
+                c = c + 1
+        total = len(now['Return'])
+        freq = c/total
+        industry[x] = freq
+    except:
+        continue
+
+vals = list()
+for x in industry.values():
+    x = float(x)
+    vals.append(x)
+vals = np.array(vals)
+
+avg = np.mean(vals)
+std = np.std(vals)
+for x in industry.keys():
+    if industry[x] >= avg + (1.5*std):
+        screen.append(x)
+
+y = " "
+for x in screen:
+    refer = x + " "
+    y = y + refer
+print(y)
