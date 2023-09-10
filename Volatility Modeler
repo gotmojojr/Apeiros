@@ -1,0 +1,29 @@
+import pandas as pd
+import yfinance as yf
+import numpy as np
+
+input = input("Type Stock Ticker Here: ")
+ticker = input.upper()
+ticker = ticker.split()
+period = '3mo'
+interval = '1d'
+
+# Set the display options
+pd.set_option('display.max_columns', None)  # Show all columns
+pd.set_option('display.max_rows', None)     # Show all rows
+
+results = pd.DataFrame(None,['Average Price','STD','Volatility','Lower Bound','Upper Bound'])
+for x in ticker:
+    now = yf.download(x,period=period,interval=interval)
+
+    avg = np.mean(now['Close'])
+    std = np.std(now['Close'])
+    vols = std/avg
+    lb = avg - std
+    up = avg + std
+    results[x] = [avg,std,vols,lb,up]
+
+print(results.T)
+
+
+
